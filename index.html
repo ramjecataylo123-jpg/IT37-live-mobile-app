@@ -98,8 +98,7 @@
   </div>
 
   <script>
-    // REPLACE THIS URL WITH YOUR RENDER BACKEND URL (keep /api/items at the end)
-    const API_URL = 'https://YOUR-RENDER-URL.onrender.com/api/items';
+    const API_URL = 'https://it37-live-app.onrender.com/api/items';
 
     function getCategoryClass(cat) {
       const c = String(cat || '').toLowerCase();
@@ -131,7 +130,7 @@
         renderItems(items);
         setStatus(`Showing ${items.length} item(s)`);
       } catch (err) {
-        setStatus('Error loading items. Check API_URL or wait for Render to wake up.');
+        setStatus('Error loading items. Wait a moment for Render to wake up and refresh.');
         console.error(err);
       }
     }
