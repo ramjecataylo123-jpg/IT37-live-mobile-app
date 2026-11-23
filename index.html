@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IT37 Live CRUD App</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body { background: #f3f4f6; color: #111827; padding: 24px; }
+    .container { max-width: 900px; margin: 0 auto; }
+    .header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .header h1 { font-size: 1.6rem; }
+    .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+    input, select, textarea, button {
+      padding: 10px 12px; border-radius: 8px; border: 1px solid #d1d5db; font-size: 0.95rem;
+    }
+    input, select, textarea { background: #fff; color: #111827; }
+    .search-input { flex: 1; min-width: 200px; }
+    button { cursor: pointer; font-weight: 600; border: none; transition: opacity 0.15s; }
+    button:hover { opacity: 0.9; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-edit { background: #f59e0b; color: #fff; padding: 6px 12px; font-size: 0.85rem; }
+    .btn-delete { background: #ef4444; color: #fff; padding: 6px 12px; font-size: 0.85rem; }
+    .btn-secondary { background: #e5e7eb; color: #111827; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+    .card {
+      background: #fff; border-radius: 12px; padding: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06); display: flex; flex-direction: column; justify-content: space-between; gap: 12px;
+    }
+    .badge {
+      display: inline-block; color: #fff; font-size: 0.75rem; font-weight: 700;
+      text-transform: uppercase; padding: 4px 10px; border-radius: 999px; margin-bottom: 8px;
+    }
+    .cat-electronics { background: #2563eb; }
+    .cat-apparel { background: #dc2626; }
+    .cat-accessories { background: #ec4899; }
+    .cat-food { background: #111827; }
+    .price { font-size: 1.15rem; font-weight: 700; color: #059669; margin-top: 6px; }
+    .stock { font-size: 0.85rem; color: #6b7280; }
+    .desc { font-size: 0.9rem; color: #4b5563; margin-top: 6px; }
+    .actions { display: flex; gap: 8px; }
+    .status-msg { margin-bottom: 14px; font-size: 0.9rem; color: #374151; }
+
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+      display: none; align-items: center; justify-content: center; padding: 16px; z-index: 50;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: #fff; width: 100%; max-width: 440px; border-radius: 12px;
+      padding: 20px; display: flex; flex-direction: column; gap: 12px;
+    }
+    .modal h2 { font-size: 1.25rem; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>IT37 Live CRUD App</h1>
+      <button class="btn-primary" onclick="openModal()">+ Add Item</button>
+    </div>
+
+    <div class="controls">
+      <input id="searchInput" class="search-input" type="text" placeholder="Search items..." oninput="loadItems()" />
+      <select id="categoryFilter" onchange="loadItems()">
+        <option value="all">All Categories</option>
+        <option value="electronics">Electronics (Blue)</option>
+        <option value="apparel">Apparel (Red)</option>
+        <option value="accessories">Accessories (Pink)</option>
+        <option value="food">Food (Black)</option>
+      </select>
+    </div>
+
+    <div id="statusMsg" class="status-msg">Loading items...</div>
+    <div id="itemsGrid" class="grid"></div>
+  </div>
+
+  <div id="itemModal" class="modal-backdrop">
+    <div class="modal">
+      <h2 id="modalTitle">Add Item</h2>
+      <input type="hidden" id="itemId" />
+      <input id="titleInput" type="text" placeholder="Item title" required />
+      <select id="categoryInput">
+        <option value="electronics">Electronics</option>
+        <option value="apparel">Apparel</option>
+        <option value="accessories">Accessories</option>
+        <option value="food">Food</option>
+      </select>
+      <input id="priceInput" type="number" step="0.01" placeholder="Price" required />
+      <input id="stockInput" type="number" placeholder="Stock quantity" value="10" />
+      <textarea id="descInput" rows="3" placeholder="Description (optional)"></textarea>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" onclick="closeModal()">Cancel</button>
+        <button type="button" class="btn-primary" onclick="saveItem()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // REPLACE THIS URL WITH YOUR RENDER BACKEND URL (keep /api/items at the end)
+    const API_URL = 'https://YOUR-RENDER-URL.onrender.com/api/items';
+
+    function getCategoryClass(cat) {
+      const c = String(cat || '').toLowerCase();
+      if (c === 'electronics') return 'cat-electronics';
+      if (c === 'apparel') return 'cat-apparel';
+      if (c === 'accessories') return 'cat-accessories';
+      if (c === 'food') return 'cat-food';
+      return 'cat-electronics';
+    }
+
+    function setStatus(msg) {
+      document.getElementById('statusMsg').textContent = msg;
+    }
+
+    async function loadItems() {
+      const search = document.getElementById('searchInput').value.trim();
+      const category = document.getElementById('categoryFilter').value;
+      const params = new URLSearchParams();
+      if (category && category !== 'all') params.set('category', category);
+      if (search) params.set('search', search);
+
+      const url = params.toString() ? `${API_URL}?${params.toString()}` : API_URL;
+      setStatus('Connecting to live backend (first load on free Render may take up to 50s)...');
+
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to fetch items');
+        const items = await res.json();
+        renderItems(items);
+        setStatus(`Showing ${items.length} item(s)`);
+      } catch (err) {
+        setStatus('Error loading items. Check API_URL or wait for Render to wake up.');
+        console.error(err);
+      }
+    }
+
+    function renderItems(items) {
+      const grid = document.getElementById('itemsGrid');
+      if (!items.length) {
+        grid.innerHTML = '<p>No items found.</p>';
+        return;
+      }
+      grid.innerHTML = items.map(item => `
+        <div class="card">
+          <div>
+            <span class="badge ${getCategoryClass(item.category)}">${escapeHtml(item.category)}</span>
+            <h3>${escapeHtml(item.title)}</h3>
+            <div class="price">₱${Number(item.price || 0).toLocaleString()}</div>
+            <div class="stock">Stock: ${Number(item.stock ?? 0)}</div>
+            ${item.description ? `<p class="desc">${escapeHtml(item.description)}</p>` : ''}
+          </div>
+          <div class="actions">
+            <button class="btn-edit" onclick='openEdit(${JSON.stringify(item).replace(/'/g, "&#39;")})'>Edit</button>
+            <button class="btn-delete" onclick="deleteItem(${item.id})">Delete</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function openModal() {
+      document.getElementById('modalTitle').textContent = 'Add Item';
+      document.getElementById('itemId').value = '';
+      document.getElementById('titleInput').value = '';
+      document.getElementById('categoryInput').value = 'electronics';
+      document.getElementById('priceInput').value = '';
+      document.getElementById('stockInput').value = '10';
+      document.getElementById('descInput').value = '';
+      document.getElementById('itemModal').classList.add('open');
+    }
+
+    function openEdit(item) {
+      document.getElementById('modalTitle').textContent = 'Edit Item';
+      document.getElementById('itemId').value = item.id;
+      document.getElementById('titleInput').value = item.title || '';
+      document.getElementById('categoryInput').value = item.category || 'electronics';
+      document.getElementById('priceInput').value = item.price ?? 0;
+      document.getElementById('stockInput').value = item.stock ?? 0;
+      document.getElementById('descInput').value = item.description || '';
+      document.getElementById('itemModal').classList.add('open');
+    }
+
+    function closeModal() {
+      document.getElementById('itemModal').classList.remove('open');
+    }
+
+    async function saveItem() {
+      const id = document.getElementById('itemId').value;
+      const payload = {
+        title: document.getElementById('titleInput').value.trim(),
+        category: document.getElementById('categoryInput').value,
+        price: Number(document.getElementById('priceInput').value),
+        stock: Number(document.getElementById('stockInput').value),
+        description: document.getElementById('descInput').value.trim()
+      };
+
+      if (!payload.title) {
+        alert('Please enter an item title.');
+        return;
+      }
+
+      const method = id ? 'PUT' : 'POST';
+      const url = id ? `${API_URL}/${id}` : API_URL;
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        closeModal();
+        loadItems();
+      } else {
+        alert('Failed to save item.');
+      }
+    }
+
+    async function deleteItem(id) {
+      if (!confirm('Delete this item?')) return;
+      const res = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        loadItems();
+      } else {
+        alert('Failed to delete item.');
+      }
+    }
+
+    loadItems();
+  </script>
+</body>
+</html>
